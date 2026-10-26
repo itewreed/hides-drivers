@@ -20,10 +20,16 @@ obj-m += $(module).o
 default:
 	$(MAKE) MYPWD=$(PWD) -C $(KERNELDIR) M=$(PWD) modules
 
-EXTRA_CFLAGS += -DEXPORT_SYMTAB -Wno-unused-value -Wno-unused-variable -Wno-unused-parameter -Wno-switch 
+# Kbuild dropped support for EXTRA_CFLAGS in Linux 6.15, use ccflags-y.
+# EXTRA_CFLAGS given on the command line is still honored for compatibility.
+ccflags-y += $(EXTRA_CFLAGS)
+ccflags-y += -DEXPORT_SYMTAB -Wno-unused-value -Wno-unused-variable -Wno-unused-parameter -Wno-switch 
+
+# Build with "make TSDUCK_WRITE=y" for a blocking write(2) (no polling required).
+ccflags-$(TSDUCK_WRITE) += -DTSDUCK_WRITE
 
 ifeq "$(MACHINE)" "x86_64"
-EXTRA_CFLAGS += -Wno-enum-compare -Wno-int-to-pointer-cast -Wno-array-bounds
+ccflags-y += -Wno-enum-compare -Wno-int-to-pointer-cast -Wno-array-bounds
 endif
 
 install:
@@ -31,7 +37,7 @@ install:
 	install -m 644 -c $(module).ko $(INSTALLDIR)
 	/sbin/depmod -a ${KERNELRELEASE}
 
-remove: 16.11.10.1.
+remove:
 	rm -f $(INSTALLDIR)/$(module).ko
 	/sbin/modprobe -r $(module)
 
