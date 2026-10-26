@@ -59,6 +59,13 @@ calls always succeed the first time (except in case of _real_ errors of course).
 To let applications checking if the driver needs polling or not, the version
 string of the new driver ends with a `'w'` letter.
 
+#### Building and installing the Linux driver
+
+See [linux-drivers/README.md](linux-drivers/README.md) for the build
+instructions (DKMS package or manual build), the installation, the device
+permissions and an example of use with TSDuck. The driver builds on Linux
+kernels from 3.10 up to 7.x.
+
 #### API and SDK
 
 The original SDK is hopeless. The API definition is not even the same between

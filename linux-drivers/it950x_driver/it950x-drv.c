@@ -74,56 +74,43 @@ static DWORD DRV_IrTblDownload(IN void* handle)
         PDEVICE_CONTEXT pdc = (PDEVICE_CONTEXT)handle;
         struct file *filp;
         unsigned char b_buf[512] ;
-        int i, fileSize;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,18,0)
+        int fileSize;
+        loff_t pos = 0;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
         mm_segment_t oldfs;
 #endif
 
         deb_data("- Enter %s Function -\n",__FUNCTION__);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
-		oldfs = get_fs();
-		set_fs(get_ds());
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
-		oldfs = get_fs();
-		set_fs(KERNEL_DS);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,18,0)
-		oldfs = force_uaccess_begin();
-#endif
-
-        filp=filp_open("/lib/firmware/af35irtbl.bin", O_RDWR,0644);
+        filp=filp_open("/lib/firmware/af35irtbl.bin", O_RDONLY, 0);
         if ( IS_ERR(filp) ) {
-                deb_data("      LoadIrTable : Can't open file\n");goto exit;}
+                deb_data("      LoadIrTable : Can't open file\n");
+                return (dwError);
+        }
 
-        if ( (filp->f_op) == NULL ) {
-                deb_data("      LoadIrTable : File Operation Method Error!!\n");goto exit;}
+        /*
+         * Since Linux 5.10, f_op->read is NULL on most filesystems (ext4, xfs, btrfs...)
+         * and calling it directly crashes the kernel. Use kernel_read() instead.
+         */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+        oldfs = get_fs();
+        set_fs(KERNEL_DS);
+        fileSize = vfs_read(filp, (char __user *)b_buf, sizeof(b_buf), &pos);
+        set_fs(oldfs);
+#else
+        fileSize = kernel_read(filp, b_buf, sizeof(b_buf), &pos);
+#endif
+        filp_close(filp, NULL);
 
-        filp->f_pos=0x00;
-        fileSize = filp->f_op->read(filp,b_buf,sizeof(b_buf),&filp->f_pos);
-
-        for(i=0; i<fileSize; i++)
-        {
-              //deb_data("\n Data %d",i); //
-              //deb_data("0x%x",b_buf[i]);//
-              // dwError = Af901xWriteReg(ucDemod2WireAddr, 0, MERC_IR_TABLE_BASE_ADDR + i, b_buf[i]);
-              //if (dwError) goto exit;
+        if (fileSize < 0) {
+                deb_data("      LoadIrTable : Can't read file\n");
+                return (dwError);
         }
 
         dwError = IT9507_loadIrTable((Modulator*) &pdc->modulator, (Word)fileSize, b_buf);
-        if (dwError) {deb_data("Modulator_loadIrTable fail"); goto exit;}
+        if (dwError) deb_data("Modulator_loadIrTable fail");
 
-        filp_close(filp, NULL);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
-		set_fs(oldfs);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,18,0)
-		force_uaccess_end(oldfs);
-#endif
-
-exit:
-		deb_data("LoadIrTable fail!\n");
         return (dwError);
-
-
 }
 
 /*

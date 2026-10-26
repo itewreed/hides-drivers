@@ -108,14 +108,16 @@ Dword Usb2_writeControlBus (
 ) {
     Dword     ret;
     int		  act_len;
-	Byte *pTmpBuffer = ((DEVICE_CONTEXT *)dev_get_drvdata(&(usb_get_dev(modulator->userData))->dev))->pControlBuffer_WriteReg;//kzalloc(sizeof(buffer)*bufferLength, GFP_KERNEL);
+	/* Do not use usb_get_dev() here, it takes a reference which is never released. */
+	struct usb_device *udev = (struct usb_device *) modulator->userData;
+	Byte *pTmpBuffer = ((DEVICE_CONTEXT *)dev_get_drvdata(&udev->dev))->pControlBuffer_WriteReg;//kzalloc(sizeof(buffer)*bufferLength, GFP_KERNEL);
 	ret = 0;
 
 	if (pTmpBuffer) 
 		memcpy(pTmpBuffer, buffer, bufferLength);
 //deb_data(" ---------Usb2_writeControlBus----------\n", ret);	
-	ret = usb_bulk_msg(usb_get_dev( modulator->userData),
-			usb_sndbulkpipe(usb_get_dev(modulator->userData), 0x02),
+	ret = usb_bulk_msg(udev,
+			usb_sndbulkpipe(udev, 0x02),
 			pTmpBuffer,
 			bufferLength,
 			&act_len,
@@ -134,12 +136,13 @@ Dword Usb2_readControlBus (
 ) {
 	Dword     ret;
 	int       nBytesRead;
-	Byte *pTmpBuffer = ((DEVICE_CONTEXT *)dev_get_drvdata(&(usb_get_dev(modulator->userData))->dev))->pControlBuffer_ReadReg;//kzalloc(sizeof(buffer)*bufferLength, GFP_KERNEL);
+	struct usb_device *udev = (struct usb_device *) modulator->userData;
+	Byte *pTmpBuffer = ((DEVICE_CONTEXT *)dev_get_drvdata(&udev->dev))->pControlBuffer_ReadReg;//kzalloc(sizeof(buffer)*bufferLength, GFP_KERNEL);
 	ret = 0;
 
 //deb_data(" ---------Usb2_readControlBus----------\n", ret);			
-   ret = usb_bulk_msg(usb_get_dev(modulator->userData),
-				usb_rcvbulkpipe(usb_get_dev(modulator->userData),129),
+   ret = usb_bulk_msg(udev,
+				usb_rcvbulkpipe(udev, 129),
 				pTmpBuffer,
 				bufferLength,
 				&nBytesRead,

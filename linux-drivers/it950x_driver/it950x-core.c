@@ -786,7 +786,7 @@ DWORD Rx_RingBuffer(
 
 /******************************************************************/
 
-static void tx_urb_completion(struct urb *purb, struct pt_regs *ppt_regs)
+static void tx_urb_completion(struct urb *purb)
 {
 	struct it950x_urb_context *context = purb->context;
 	int ptype = usb_pipetype(purb->pipe);
@@ -836,7 +836,7 @@ static void tx_urb_completion(struct urb *purb, struct pt_regs *ppt_regs)
 	return;
 }
 
-static void tx_urb_completion_low_brate(struct urb *purb, struct pt_regs *ppt_regs)
+static void tx_urb_completion_low_brate(struct urb *purb)
 {
 	struct it950x_urb_context *context = purb->context;
 	int ptype = usb_pipetype(purb->pipe);
@@ -886,7 +886,7 @@ static void tx_urb_completion_low_brate(struct urb *purb, struct pt_regs *ppt_re
 	return;
 }
 #if RETURN_CHANNEL
-static void tx_urb_completion_cmd(struct urb *purb, struct pt_regs *ppt_regs)
+static void tx_urb_completion_cmd(struct urb *purb)
 {
 	struct it950x_urb_context *context = purb->context;
 	int ptype = usb_pipetype(purb->pipe);
@@ -933,7 +933,7 @@ static void tx_urb_completion_cmd(struct urb *purb, struct pt_regs *ppt_regs)
 	return;
 }
 #endif
-static void rx_urb_completion(struct urb *purb, struct pt_regs *ppt_regs)
+static void rx_urb_completion(struct urb *purb)
 {
 	struct it950x_urb_context *context = purb->context;
 	struct it950x_dev *dev = context->dev;	
@@ -2187,7 +2187,7 @@ static int it950x_probe(struct usb_interface *intf, const struct usb_device_id *
 				  usb_sndbulkpipe(dev->usbdev, 0x06),
 				  purb->transfer_buffer,
 				  URB_BUFSIZE_TX,
-				  (usb_complete_t)tx_urb_completion,
+				  tx_urb_completion,
 				  &dev->tx_urb_context[i]);
 		
 		purb->transfer_flags = 0;
@@ -2216,7 +2216,7 @@ static int it950x_probe(struct usb_interface *intf, const struct usb_device_id *
 				  usb_sndbulkpipe(dev->usbdev, 0x06),
 				  purb->transfer_buffer,
 				  URB_BUFSIZE_TX_LOW_BRATE,
-				  (usb_complete_t)tx_urb_completion_low_brate,
+				  tx_urb_completion_low_brate,
 				  &dev->tx_urb_context_low_brate[i]);
 		purb->transfer_flags = 0;
 	}		
@@ -2245,7 +2245,7 @@ static int it950x_probe(struct usb_interface *intf, const struct usb_device_id *
 				  usb_sndbulkpipe(dev->usbdev, 0x06),
 				  purb->transfer_buffer,
 				  URB_BUFSIZE_TX_CMD,
-				  (usb_complete_t)tx_urb_completion_cmd,
+				  tx_urb_completion_cmd,
 				  &dev->tx_urb_context_cmd[i]);
 		
 		purb->transfer_flags = 0;
@@ -2287,7 +2287,7 @@ static int it950x_probe(struct usb_interface *intf, const struct usb_device_id *
 				  usb_rcvbulkpipe(dev->usbdev, 0x85),
 				  dev->rx_urbs[i]->transfer_buffer,
 				  URB_BUFSIZE_RX,
-				  (usb_complete_t)rx_urb_completion,
+				  rx_urb_completion,
 				  &dev->rx_urb_context[i]);
 						  
 			dev->rx_urbs[i]->transfer_flags = 0;
@@ -2391,6 +2391,7 @@ static void it950x_disconnect(struct usb_interface *intf)
 	dev = usb_get_intfdata(intf);
 	if (!dev) {
 		deb_data("dev = NULL");
+		return;
 	}
 	
 	/*DM368 usb bus error when using kill urb */
@@ -2402,6 +2403,21 @@ static void it950x_disconnect(struct usb_interface *intf)
 	
 	mutex_unlock(&it950x_urb_kill);
 #endif
+
+	/*
+	 * Make sure no URB is still in flight before releasing the ring buffers
+	 * which are used as transfer buffers. usb_kill_urb() is a no-op on idle URBs.
+	 */
+	for (i = 0; i < URB_COUNT_TX; i++)
+		usb_kill_urb(dev->tx_urbs[i]);
+	for (i = 0; i < URB_COUNT_TX_LOW_BRATE; i++)
+		usb_kill_urb(dev->tx_urbs_low_brate[i]);
+#if RETURN_CHANNEL
+	for (i = 0; i < URB_COUNT_TX_CMD; i++)
+		usb_kill_urb(dev->tx_urbs_cmd[i]);
+#endif
+	for (i = 0; i < URB_COUNT_RX; i++)
+		usb_kill_urb(dev->rx_urbs[i]);
 
 	/* Release RBRingBuffer and urbs */
 	tx_free_urbs(dev);		
@@ -2422,12 +2438,6 @@ static void it950x_disconnect(struct usb_interface *intf)
 	if (dev->pRxRingBuffer)
 		free_pages((long unsigned int)dev->pRxRingBuffer, get_order(dev->dwRxTolBufferSize));
 
-	/* if urb doesn't call back, kill it. */
-	for (i = 0; i < URB_COUNT_RX; i++) {   
-		if(dev->rx_urbstatus[i] == 1){
-			usb_kill_urb(dev->rx_urbs[i]);
-		}
-	}	
 	rx_free_urbs(dev);	
 	
 #if PACKECT_SHIFT
