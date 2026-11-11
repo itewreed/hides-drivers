@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dvbt-sender"
+version = "0.1.0"
+description = "Weboberfläche: mehrere Videos/Streams zu einem DVB-T-Multiplex bündeln und über HiDes UT-100C senden"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.100", "uvicorn>=0.23", "pydantic>=2"]
+
+[project.scripts]
+dvbt-sender = "dvbt_sender.server:main"
+
+[tool.setuptools]
+packages = ["dvbt_sender"]
+
+[tool.setuptools.package-data]
+dvbt_sender = ["static/*"]

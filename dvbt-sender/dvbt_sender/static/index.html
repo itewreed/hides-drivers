@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DVB-T Sender</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>DVB-T Sender</h1>
+  <span id="state" class="pill">gestoppt</span>
+  <button id="startstop" class="primary">Senden starten</button>
+</header>
+<div id="error" class="banner error" hidden></div>
+<div id="note" class="banner note" hidden>Änderungen werden gespeichert und gelten beim nächsten Start.</div>
+
+<main>
+<section class="card" id="tx">
+  <h2>Sender</h2>
+  <div class="grid">
+    <label>Ausgabe
+      <select data-k="transmitter.output">
+        <option value="hides">HiDes UT-100C</option>
+        <option value="udp">UDP (zum Testen, z.B. VLC)</option>
+        <option value="file">Datei (.ts)</option>
+      </select>
+    </label>
+    <label class="o-hides">Gerät
+      <input data-k="transmitter.device" placeholder="leer = Adapter-Nummer, z.B. /dev/usb-it950x0">
+    </label>
+    <label class="o-hides">Adapter-Nummer
+      <input type="number" min="0" data-k="transmitter.adapter" data-t="int">
+    </label>
+    <label class="o-file">Ausgabedatei
+      <input data-k="transmitter.file_path">
+    </label>
+    <label class="o-udp">UDP-Ziel (Adresse:Port)
+      <input data-k="transmitter.udp_address">
+    </label>
+    <label>Kanal
+      <select id="channel"><option value="">eigene Frequenz</option></select>
+    </label>
+    <label>Frequenz (MHz)
+      <input type="number" step="0.001" min="50" max="1000" id="freq">
+    </label>
+    <label>Bandbreite
+      <select data-k="transmitter.bandwidth" data-t="int">
+        <option value="8000000">8 MHz</option><option value="7000000">7 MHz</option>
+        <option value="6000000">6 MHz</option><option value="5000000">5 MHz</option>
+      </select>
+    </label>
+    <label>Modulation
+      <select data-k="transmitter.constellation">
+        <option>QPSK</option><option>16-QAM</option><option>64-QAM</option>
+      </select>
+    </label>
+    <label>Coderate (Fehlerschutz)
+      <select data-k="transmitter.code_rate">
+        <option>1/2</option><option>2/3</option><option>3/4</option><option>5/6</option><option>7/8</option>
+      </select>
+    </label>
+    <label>Guard-Intervall
+      <select data-k="transmitter.guard_interval">
+        <option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option>
+      </select>
+    </label>
+    <label>Modus
+      <select data-k="transmitter.transmission_mode">
+        <option>2K</option><option>4K</option><option>8K</option>
+      </select>
+    </label>
+    <label class="o-hides">Verstärkung (dB)
+      <span class="row">
+        <input type="number" step="1" data-k="transmitter.gain" data-t="intnull" placeholder="Gerätestandard">
+        <button type="button" id="gainrange" class="small">Bereich</button>
+      </span>
+    </label>
+    <label class="o-hides">DC-Kompensation I / Q
+      <span class="row">
+        <input type="number" data-k="transmitter.dc_i" data-t="intnull" placeholder="I">
+        <input type="number" data-k="transmitter.dc_q" data-t="intnull" placeholder="Q">
+      </span>
+    </label>
+    <label class="o-hides">Spektralinversion
+      <select data-k="transmitter.spectral_inversion">
+        <option value="auto">automatisch</option><option value="off">aus</option><option value="on">ein</option>
+      </select>
+    </label>
+  </div>
+  <div class="row tools o-hides">
+    <button type="button" id="devices" class="small">Geräte anzeigen</button>
+  </div>
+  <pre id="toolout" hidden></pre>
+</section>
+
+<section class="card">
+  <h2>Multiplex</h2>
+  <div class="grid">
+    <label>Netzwerkname <input data-k="multiplex.network_name"></label>
+    <label>Transport-Stream-ID <input type="number" min="0" max="65535" data-k="multiplex.ts_id" data-t="int"></label>
+    <label>Original-Network-ID <input type="number" min="0" max="65535" data-k="multiplex.original_network_id" data-t="int"></label>
+    <label>Network-ID <input type="number" min="0" max="65535" data-k="multiplex.network_id" data-t="int"></label>
+    <label>Reserve (%) <input type="number" min="0" max="30" step="0.5" data-k="multiplex.reserve_percent" data-t="float"></label>
+  </div>
+  <div id="rate"></div>
+  <div id="bar" class="bar"></div>
+  <ul id="warnings"></ul>
+</section>
+
+<section class="card">
+  <div class="cardhead">
+    <h2>Programme</h2>
+    <button type="button" id="addprog" class="small">+ Programm</button>
+  </div>
+  <div id="programs"></div>
+</section>
+
+<section class="card">
+  <h2>Status</h2>
+  <div id="procs"><p class="muted">Der Sender ist aus.</p></div>
+  <details>
+    <summary>Befehlszeilen anzeigen</summary>
+    <pre id="cmds"></pre>
+  </details>
+</section>
+</main>
+
+<dialog id="browser">
+  <form method="dialog">
+    <div class="cardhead"><h2>Datei wählen</h2><button class="small">Schließen</button></div>
+    <div id="bpath" class="muted"></div>
+    <ul id="blist"></ul>
+  </form>
+</dialog>
+
+<template id="progtpl">
+  <div class="prog">
+    <div class="proghead">
+      <label class="check"><input type="checkbox" data-p="enabled"> aktiv</label>
+      <input class="pname" data-p="name" placeholder="Programmname">
+      <span class="pinfo muted"></span>
+      <span class="spacer"></span>
+      <button type="button" class="small up" title="nach oben">↑</button>
+      <button type="button" class="small down" title="nach unten">↓</button>
+      <button type="button" class="small danger del">Entfernen</button>
+    </div>
+    <div class="grid">
+      <label>Quelle
+        <select data-p="source_type">
+          <option value="file">Datei</option>
+          <option value="url">Stream / URL</option>
+          <option value="testbild">Testbild + 1-kHz-Ton</option>
+        </select>
+      </label>
+      <label class="s-src wide">Pfad oder URL
+        <span class="row"><input data-p="source" placeholder="/pfad/video.mp4 oder udp://@239.1.1.1:1234">
+        <button type="button" class="small browse">…</button></span>
+      </label>
+      <label class="check s-loop"><input type="checkbox" data-p="loop"> Endlosschleife</label>
+      <label class="check s-throttle"><input type="checkbox" data-p="throttle"> Auf Echtzeit drosseln (Datei im Netz)</label>
+      <label>Videoformat
+        <select data-p="video_format">
+          <option value="sd169">SD 576i 16:9</option>
+          <option value="sd43">SD 576i 4:3</option>
+          <option value="hd720">HD 720p</option>
+          <option value="hd1080">HD 1080p</option>
+        </select>
+      </label>
+      <label>Videocodec
+        <select data-p="video_codec">
+          <option value="mpeg2">MPEG-2 (alle Empfänger)</option>
+          <option value="h264">H.264 (neuere Empfänger)</option>
+        </select>
+      </label>
+      <label>Video-Bitrate (Mbit/s)
+        <input type="number" step="0.1" min="0" data-p="video_bitrate" data-t="mbit" placeholder="automatisch">
+      </label>
+      <label>Audio
+        <select data-p="audio_codec"><option value="mp2">MPEG-1 Layer 2</option><option value="ac3">AC-3</option></select>
+      </label>
+      <label>Audio-Bitrate
+        <select data-p="audio_bitrate" data-t="int">
+          <option value="128000">128 kbit/s</option><option value="192000">192 kbit/s</option>
+          <option value="256000">256 kbit/s</option><option value="384000">384 kbit/s</option>
+        </select>
+      </label>
+      <label>Service-ID <input type="number" min="0" max="65535" data-p="service_id" data-t="int" placeholder="0 = auto"></label>
+      <label>Anbieter <input data-p="provider" placeholder="leer = Netzwerkname"></label>
+    </div>
+  </div>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
